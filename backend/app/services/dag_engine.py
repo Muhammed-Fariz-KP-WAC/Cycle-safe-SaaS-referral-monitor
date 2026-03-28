@@ -1,8 +1,8 @@
 import time
-from collections import defaultdict
 from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.referral import Referral
@@ -10,43 +10,50 @@ from app.models.user import User
 
 
 class DAGEngine:
+    """
+    Advanced DAG engine using Recursive CTEs for high-performance graph traversal.
+    Ensures O(depth) performance for cycle detection and subtree fetching.
+    """
+
     def can_add_edge(
         self,
         db: Session,
         new_user_id: str,
         referrer_id: str,
     ) -> tuple[bool, str | None, list[str], float]:
+        """
+        Check if adding edge (new_user -> referrer) creates a cycle using Recursive CTE.
+        """
         started = time.perf_counter()
 
         if new_user_id == referrer_id:
             elapsed = (time.perf_counter() - started) * 1000
             return False, "self_referral", [new_user_id], elapsed
 
-        result = db.execute(
-            select(Referral.new_user_id, Referral.referrer_id).where(
-                Referral.status == "valid",
-                Referral.edge_type == "primary",
+        # Recursive CTE: find if referrer is already a descendant of new_user
+        # (i.e., is there a path from referrer -> new_user?)
+        query = text("""
+            WITH RECURSIVE ancestors AS (
+                SELECT referrer_id, CAST(new_user_id || '->' || referrer_id AS TEXT) as path
+                FROM referrals
+                WHERE new_user_id = :referrer_id AND status = 'valid' AND edge_type = 'primary'
+                
+                UNION ALL
+                
+                SELECT r.referrer_id, a.path || '->' || r.referrer_id
+                FROM referrals r
+                JOIN ancestors a ON r.new_user_id = a.referrer_id
+                WHERE r.status = 'valid' AND r.edge_type = 'primary'
             )
-        )
-        parent_by_child = {
-            child: parent
-            for child, parent in result.all()
-        }
+            SELECT path FROM ancestors WHERE referrer_id = :new_user_id LIMIT 1
+        """)
 
-        path = [referrer_id]
-        current = referrer_id
-        seen = {referrer_id}
-        while current in parent_by_child:
-            current = parent_by_child[current]
-            path.append(current)
-            if current == new_user_id:
-                cycle_path = [new_user_id, *reversed(path)]
-                elapsed = (time.perf_counter() - started) * 1000
-                return False, "cycle", cycle_path, elapsed
-            if current in seen:
-                elapsed = (time.perf_counter() - started) * 1000
-                return False, "corrupt_graph", path, elapsed
-            seen.add(current)
+        result = db.execute(query, {"referrer_id": referrer_id, "new_user_id": new_user_id}).fetchone()
+
+        if result:
+            cycle_path = result[0].split("->") + [new_user_id]
+            elapsed = (time.perf_counter() - started) * 1000
+            return False, "cycle", cycle_path, elapsed
 
         elapsed = (time.perf_counter() - started) * 1000
         return True, None, [], elapsed
@@ -73,80 +80,102 @@ class DAGEngine:
         self,
         db: Session,
         user_id: str,
-        max_depth: int = 3,
+        max_depth: int = 5,
     ) -> dict:
-        users_result = db.execute(select(User))
-        users = {user.id: user for user in users_result.scalars().all()}
-        edges_result = db.execute(
-            select(Referral).where(Referral.status == "valid", Referral.edge_type == "primary")
-        )
-        children_by_parent: dict[str, list[Referral]] = defaultdict(list)
-        for edge in edges_result.scalars().all():
-            children_by_parent[edge.referrer_id].append(edge)
+        """
+        Fetch the full referral subtree rooted at user_id using Recursive CTE.
+        Returns a rich graph structure including ancestor paths for smart highlighting.
+        """
+        query = text("""
+            WITH RECURSIVE descendants AS (
+                -- Base case: the root node
+                SELECT 
+                    id as user_id, 
+                    CAST(NULL AS TEXT) as parent_id, 
+                    CAST(NULL AS TEXT) as edge_id,
+                    0 as depth,
+                    CAST(id AS TEXT) as full_path
+                FROM users 
+                WHERE id = :user_id
+                
+                UNION ALL
+                
+                -- Recursive step: find children
+                SELECT 
+                    r.new_user_id, 
+                    r.referrer_id, 
+                    r.id,
+                    d.depth + 1,
+                    d.full_path || ',' || r.new_user_id
+                FROM referrals r
+                JOIN descendants d ON r.referrer_id = d.user_id
+                WHERE r.status = 'valid' AND r.edge_type = 'primary' AND d.depth < :max_depth
+            )
+            SELECT 
+                d.*, 
+                u.name, 
+                u.reward_balance, 
+                u.status as user_status
+            FROM descendants d
+            JOIN users u ON d.user_id = u.id
+        """)
 
-        root = users[user_id]
-        nodes = [
-            {
-                "id": root.id,
-                "data": {
-                    "label": root.name,
-                    "depth": 0,
-                    "reward_balance": root.reward_balance,
-                    "status": root.status,
-                },
+        rows = db.execute(query, {"user_id": user_id, "max_depth": max_depth}).fetchall()
+        
+        if not rows:
+            # Root user might not have referrals, but we still want to show the root
+            root = db.get(User, user_id)
+            if not root: return {"nodes": [], "edges": []}
+            return {
+                "root": {"id": root.id, "name": root.name, "reward_balance": root.reward_balance},
+                "nodes": [{"id": root.id, "data": {"label": root.name, "depth": 0, "reward_balance": root.reward_balance, "ancestry": [root.id]}}],
+                "edges": [],
+                "total_depth": 0,
+                "total_descendants": 0
             }
-        ]
-        graph_edges = []
-        total_depth = 0
-        total_descendants = 0
-        queue = [(user_id, 0)]
-        visited = {user_id}
 
-        while queue:
-            current_id, depth = queue.pop(0)
-            if depth >= max_depth:
-                continue
-            for referral in children_by_parent.get(current_id, []):
-                child = users.get(referral.new_user_id)
-                if not child or child.id in visited:
-                    continue
-                visited.add(child.id)
-                child_depth = depth + 1
-                total_depth = max(total_depth, child_depth)
-                total_descendants += 1
-                nodes.append(
-                    {
-                        "id": child.id,
-                        "data": {
-                            "label": child.name,
-                            "depth": child_depth,
-                            "reward_balance": child.reward_balance,
-                            "status": child.status,
-                        },
-                    }
-                )
-                graph_edges.append(
-                    {
-                        "id": referral.id,
-                        "source": current_id,
-                        "target": child.id,
-                        "type": referral.edge_type,
-                    }
-                )
-                queue.append((child.id, child_depth))
+        nodes = []
+        edges = []
+        total_depth = 0
+        
+        for row in rows:
+            ancestry = row.full_path.split(",")
+            nodes.append({
+                "id": row.user_id,
+                "data": {
+                    "label": row.name,
+                    "depth": row.depth,
+                    "reward_balance": row.reward_balance,
+                    "status": row.user_status,
+                    "ancestry": ancestry # Smart Highlighting data
+                }
+            })
+            if row.parent_id:
+                edges.append({
+                    "id": row.edge_id,
+                    "source": row.parent_id,
+                    "target": row.user_id,
+                    "type": "primary"
+                })
+            total_depth = max(total_depth, row.depth)
+
+        root_row = next(r for r in rows if r.depth == 0)
 
         return {
             "root": {
-                "id": root.id,
-                "name": root.name,
-                "reward_balance": root.reward_balance,
-                "status": root.status,
+                "id": root_row.user_id,
+                "name": root_row.name,
+                "reward_balance": root_row.reward_balance,
+                "status": root_row.user_status,
             },
             "nodes": nodes,
-            "edges": graph_edges,
+            "edges": edges,
             "total_depth": total_depth,
-            "total_descendants": total_descendants,
+            "total_descendants": len(nodes) - 1,
         }
+
+
+dag_engine = DAGEngine()
 
 
 dag_engine = DAGEngine()
