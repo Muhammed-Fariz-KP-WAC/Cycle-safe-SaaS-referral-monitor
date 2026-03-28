@@ -1,75 +1,62 @@
+import axios from 'axios';
+
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
-async function readJson(response) {
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || "Request failed");
-  }
-  return response.json();
-}
+const apiClient = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 export async function fetchMetrics() {
-  return readJson(await fetch(`${API_BASE}/dashboard/metrics`));
+  const response = await apiClient.get('/dashboard/metrics');
+  return response.data;
 }
 
 export async function fetchActivities() {
-  return readJson(await fetch(`${API_BASE}/dashboard/activities`));
+  const response = await apiClient.get('/dashboard/activities');
+  return response.data;
 }
 
 export async function fetchFraudFlags() {
-  return readJson(await fetch(`${API_BASE}/fraud/flags`));
+  const response = await apiClient.get('/fraud/flags');
+  return response.data;
 }
 
 export async function fetchUserGraph(userId) {
-  return readJson(await fetch(`${API_BASE}/user/${userId}/graph`));
+  const response = await apiClient.get(`/user/${userId}/graph`);
+  return response.data;
 }
 
 export async function fetchUsers() {
-  return readJson(await fetch(`${API_BASE}/user`));
+  const response = await apiClient.get('/user');
+  return response.data;
 }
 
 export async function createUser(payload) {
-  return readJson(
-    await fetch(`${API_BASE}/user`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
-  );
+  const response = await apiClient.post('/user', payload);
+  return response.data;
 }
 
 export async function claimReferral(payload) {
-  return readJson(
-    await fetch(`${API_BASE}/referral/claim`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
-  );
+  const response = await apiClient.post('/referral/claim', payload);
+  return response.data;
 }
 
 export async function simulateRewards(payload) {
-  return readJson(
-    await fetch(`${API_BASE}/dashboard/simulate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
-  );
+  const response = await apiClient.post('/dashboard/simulate', payload);
+  return response.data;
 }
 
 export async function fetchRewardConfig() {
-  return readJson(await fetch(`${API_BASE}/admin/reward-config`));
+  const response = await apiClient.get('/admin/reward-config');
+  return response.data;
 }
 
 export async function patchRewardConfig(payload) {
-  return readJson(
-    await fetch(`${API_BASE}/admin/reward-config`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
-  );
+  const response = await apiClient.patch('/admin/reward-config', payload);
+  return response.data;
 }
 
 export function createEventStream(onEvent) {
