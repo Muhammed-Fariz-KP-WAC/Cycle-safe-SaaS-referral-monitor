@@ -24,10 +24,12 @@ import SimulationTool from "../components/SimulationTool";
 
 const THEME_STORAGE_KEY = "dashboard-theme";
 const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "network", label: "Network" },
-  { id: "security", label: "Security" },
-  { id: "settings", label: "Settings" },
+  { id: "overview", label: "Overview", icon: "O" },
+  { id: "users", label: "Users", icon: "U" },
+  { id: "network", label: "Network", icon: "N" },
+  { id: "security", label: "Security", icon: "S" },
+  { id: "rewards", label: "Rewards", icon: "R" },
+  { id: "simulation", label: "Simulation", icon: "T" },
 ];
 
 export default function Dashboard() {
@@ -133,54 +135,64 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="dashboard-shell">
-      <section className="hero">
-        <div className="hero-head">
-          <div>
-            <p className="eyebrow">Cycle-safe SaaS referral monitor</p>
-            <h1>Referral Engine Dashboard</h1>
-            <p className="subcopy">
-              Real-time DAG integrity, fraud visibility, and reward propagation in one view.
-            </p>
+    <div className="dashboard-root">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <div className="brand-icon">RE</div>
+          <div className="brand-text">
+            <strong>ReferralEngine</strong>
+            <span>Admin Console</span>
           </div>
-          <button className="theme-toggle" type="button" onClick={handleToggleTheme}>
-            <span className="theme-toggle-track">
-              <span className={`theme-toggle-thumb ${theme === "dark" ? "is-dark" : ""}`} />
-            </span>
-            <span>{theme === "light" ? "Dark mode" : "Light mode"}</span>
+        </div>
+        
+        <nav className="sidebar-nav">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`nav-item ${activeTab === tab.id ? "is-active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <span className="nav-icon">{tab.icon}</span>
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <button className="theme-toggle-compact" type="button" onClick={handleToggleTheme}>
+            <span className={`theme-toggle-thumb ${theme === "dark" ? "is-dark" : ""}`} />
+            <span>{theme === "light" ? "Light" : "Dark"} Mode</span>
           </button>
         </div>
-      </section>
+      </aside>
 
-      <nav className="tabs-nav">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`tab-button ${activeTab === tab.id ? "is-active" : ""}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
+      <main className="dashboard-main">
+        <header className="main-header">
+          <div className="header-info">
+            <h1>{TABS.find(t => t.id === activeTab)?.label}</h1>
+            <p className="eyebrow">Cycle-safe SaaS referral monitor</p>
+          </div>
+        </header>
 
-      <div className="tab-content">
-        {activeTab === "overview" && (
-          <>
-            <MetricsPanel metrics={metrics} />
-            <section className="grid">
-              <ActivityFeed activities={activities} users={users} />
-            </section>
-          </>
-        )}
+        <div className="tab-content">
+          {activeTab === "overview" && (
+            <>
+              <MetricsPanel metrics={metrics} />
+              <section className="grid">
+                <ActivityFeed activities={activities} users={users} />
+              </section>
+            </>
+          )}
 
-        {activeTab === "network" && (
-          <>
+          {activeTab === "users" && (
             <section className="grid">
               <CreateUserForm onSubmit={handleCreateUser} />
               <ClaimReferralForm users={users} onSubmit={handleClaim} />
             </section>
+          )}
+
+          {activeTab === "network" && (
             <section className="grid">
               <GraphView
                 graph={graph}
@@ -189,24 +201,27 @@ export default function Dashboard() {
                 onSelectUserId={setSelectedUserId}
               />
             </section>
-          </>
-        )}
+          )}
 
-        {activeTab === "security" && (
-          <section className="grid">
-            <FraudPanel fraud={fraud} users={users} />
-          </section>
-        )}
+          {activeTab === "security" && (
+            <section className="grid">
+              <FraudPanel fraud={fraud} users={users} />
+            </section>
+          )}
 
-        {activeTab === "settings" && (
-          <>
+          {activeTab === "rewards" && (
             <section className="grid">
               <RewardConfigPanel fetchConfig={fetchRewardConfig} onSave={patchRewardConfig} />
+            </section>
+          )}
+
+          {activeTab === "simulation" && (
+            <section className="grid">
               <SimulationTool onSimulate={handleSimulate} />
             </section>
-          </>
-        )}
-      </div>
-    </main>
+          )}
+        </div>
+      </main>
+    </div>
   );
 }
