@@ -26,7 +26,7 @@ const THEME_STORAGE_KEY = "dashboard-theme";
 const TABS = [
   { id: "overview", label: "Overview", icon: "O" },
   { id: "users", label: "Users", icon: "U" },
-  { id: "network", label: "Network", icon: "N" },
+  { id: "graph", label: "Graph", icon: "G" },
   { id: "security", label: "Security", icon: "S" },
   { id: "rewards", label: "Rewards", icon: "R" },
   { id: "simulation", label: "Simulation", icon: "T" },
@@ -192,7 +192,7 @@ export default function Dashboard() {
             </section>
           )}
 
-          {activeTab === "network" && (
+          {activeTab === "graph" && (
             <section className="grid">
               <GraphView
                 graph={graph}
