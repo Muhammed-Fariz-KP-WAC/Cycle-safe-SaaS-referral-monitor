@@ -23,6 +23,12 @@ import RewardConfigPanel from "../components/RewardConfigPanel";
 import SimulationTool from "../components/SimulationTool";
 
 const THEME_STORAGE_KEY = "dashboard-theme";
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "network", label: "Network" },
+  { id: "security", label: "Security" },
+  { id: "settings", label: "Settings" },
+];
 
 export default function Dashboard() {
   const [metrics, setMetrics] = useState(null);
@@ -31,6 +37,7 @@ export default function Dashboard() {
   const [activities, setActivities] = useState([]);
   const [graph, setGraph] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
   const [theme, setTheme] = useState(() => {
     if (typeof window === "undefined") {
       return "light";
@@ -144,27 +151,62 @@ export default function Dashboard() {
           </button>
         </div>
       </section>
-      <MetricsPanel metrics={metrics} />
-      <section className="grid">
-        <CreateUserForm onSubmit={handleCreateUser} />
-        <ClaimReferralForm users={users} onSubmit={handleClaim} />
-      </section>
-      <section className="grid">
-        <GraphView
-          graph={graph}
-          users={users}
-          selectedUserId={selectedUserId}
-          onSelectUserId={setSelectedUserId}
-        />
-        <FraudPanel fraud={fraud} users={users} />
-      </section>
-      <section className="grid">
-        <ActivityFeed activities={activities} users={users} />
-        <RewardConfigPanel fetchConfig={fetchRewardConfig} onSave={patchRewardConfig} />
-      </section>
-      <section className="grid">
-        <SimulationTool onSimulate={handleSimulate} />
-      </section>
+
+      <nav className="tabs-nav">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`tab-button ${activeTab === tab.id ? "is-active" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="tab-content">
+        {activeTab === "overview" && (
+          <>
+            <MetricsPanel metrics={metrics} />
+            <section className="grid">
+              <ActivityFeed activities={activities} users={users} />
+            </section>
+          </>
+        )}
+
+        {activeTab === "network" && (
+          <>
+            <section className="grid">
+              <CreateUserForm onSubmit={handleCreateUser} />
+              <ClaimReferralForm users={users} onSubmit={handleClaim} />
+            </section>
+            <section className="grid">
+              <GraphView
+                graph={graph}
+                users={users}
+                selectedUserId={selectedUserId}
+                onSelectUserId={setSelectedUserId}
+              />
+            </section>
+          </>
+        )}
+
+        {activeTab === "security" && (
+          <section className="grid">
+            <FraudPanel fraud={fraud} users={users} />
+          </section>
+        )}
+
+        {activeTab === "settings" && (
+          <>
+            <section className="grid">
+              <RewardConfigPanel fetchConfig={fetchRewardConfig} onSave={patchRewardConfig} />
+              <SimulationTool onSimulate={handleSimulate} />
+            </section>
+          </>
+        )}
+      </div>
     </main>
   );
 }
