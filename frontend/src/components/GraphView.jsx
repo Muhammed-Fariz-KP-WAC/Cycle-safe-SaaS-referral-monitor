@@ -209,7 +209,7 @@ export default function GraphView({ graph, users, selectedUserId, onSelectUserId
         <>
           <div className="graph-toolbar">
             <article className="graph-summary-card">
-              <p>Network root</p>
+              <p>Graph root</p>
               <strong>{graph.root.name}</strong>
               <small>{shortenId(graph.root.id)}</small>
             </article>
